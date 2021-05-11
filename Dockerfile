@@ -36,4 +36,4 @@ RUN bash -c "conda init"
 COPY . /app
 
 #The code to run when container is started:
-ENTRYPOINT ["conda", "run", "-n", "app", "streamlit", "run", "main.py", "--server.port=8080", "--server.address=0.0.0.0"]
+ENTRYPOINT ["conda", "run", "-n", "app", "streamlit", "run", "main.py"]
