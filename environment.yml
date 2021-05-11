@@ -1,0 +1,12 @@
+name: app
+channels:
+  - conda-forge
+dependencies:
+  - matplotlib
+  - geopandas
+  - pandas
+  - ipython
+  - rtree
+  - bs4
+  - streamlit
+
