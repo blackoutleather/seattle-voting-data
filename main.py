@@ -20,10 +20,13 @@ DROP_COUNTERS = [
     "Times Counted",
     "Times Blank Voted",
 ]
+
 make_geo_df = st.cache(helper.make_geo_df)
 clean_cols = st.cache(helper.clean_cols)
 get_seattle_precinct = st.cache(helper.get_seattle_precinct)
 join_to_precincts = st.cache(helper.get_all_geos)
+get_year_month = st.cache(helper.get_year_month)
+
 
 rename_geos = {
     "precinct_name": "Voter Precinct",
@@ -44,6 +47,11 @@ NOTES = (
     "join these empty precincts to a neighbor presumably to avoid questions"
     "\n* Don't know your district/voting precinct? Checkout King County for "
     "[maps and other info](https://kingcounty.gov/depts/elections/elections/maps/precinct-and-district-data.aspx)"
+    '"\n* What up with "Erase Trump?": Notice that about 8% of Seattle voted for Trump. But the Trump rate is not uniform. '
+    "For example 30% of Broadmoor voted for Trump in both elections. Now notice that the precincts "
+    "with high Trump vote counts also vote for other unpopular candidates i.e. Loren Culp, Egan Orion etc. Use this button "
+    "to play a game where you imagine that Trump losers didn't vote for the loser in a given race in given precinct. "
+    "How does that change things?"
 )
 
 
@@ -67,12 +75,6 @@ def voter_data():
 
     aligned.columns = cols
     return aligned
-
-@st.cache
-def get_year_month():
-    df = pd.read_pickle(f"{DATA_DIR}/seattle_data.pickle")
-    df = df[df.precinct.str.startswith('SEA ')]
-    return {year: months.month.unique() for year, months in df.groupby("year")}
 
 
 @st.cache
@@ -192,7 +194,13 @@ def multi_plot(cntrs, df):
 def total_row(tdf, label_col):
     total = tdf.sum(numeric_only=True)
     out = tdf.append(total, ignore_index=True)
-    out[label_col] = out[label_col].fillna("Total")
+    if pd.api.types.is_numeric_dtype(out[label_col]):
+        idx = out[label_col].idxmax()
+        out[label_col] = out[label_col].astype(int).astype(str)
+        out.loc[idx,label_col] = "Total"
+
+    else:
+        out[label_col] = out[label_col].fillna("Total")
     # out["Registered Voters"] = out[counters[:-1]].sum(axis=1) / out["Registered Voters"]
     return out
 
@@ -217,7 +225,7 @@ if __name__ == "__main__":
     st.markdown('# "I SEA ELECTION DATA"')
     st.markdown(
         "I can see Seattle election data and now you can too. What patterns are revealed when you can see where "
-        "the votes are coming from? The votes are coming from inside the house."
+        "the votes are coming from? I am afraid that these votes are coming from inside the house."
     )
 
     col1, col2, col3 = st.beta_columns(3)
@@ -258,7 +266,7 @@ if __name__ == "__main__":
 
     # agg geo
     geo_opts = ["precinct_name", "zipcode", "c_district", "gen_alias"]
-    geo_select = col3.selectbox("Agg Geo", [rename_geos[name] for name in geo_opts])
+    geo_select = col3.selectbox("Geographical Aggregation", [rename_geos[name] for name in geo_opts])
     agg_geo = inverse_geos[geo_select]
 
     full_vote = join_vote_data(geo, election_race, agg_geo=agg_geo)
@@ -290,9 +298,14 @@ if __name__ == "__main__":
         suffixes=[" Normed", " Counts"],
     )
     merged = merged[merged["Registered Voters Counts"] > 0]
-    summary = merged.sort_values(rename_geos[agg_geo])
 
-    plot_type = col3.selectbox("Plot Type", ["Absolute Counts", "Normed Counts"])
+    total_row_idx = merged[rename_geos[agg_geo]] == 'Total'
+    total_row = merged[total_row_idx]
+    merged  = merged[~total_row_idx]
+    summary = merged.sort_values(rename_geos[agg_geo])
+    summary = pd.concat([total_row, summary])
+
+    plot_type = col3.selectbox("Plot Type", [ "Normed Counts", "Absolute Counts"])
 
     expander = st.beta_expander("FAQ")
     expander.markdown(NOTES)

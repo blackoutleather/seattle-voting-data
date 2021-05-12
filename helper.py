@@ -2,12 +2,23 @@ import geopandas as gpd
 import pandas as pd
 import shapely
 import pathlib
+import boto3
+import io
+
+
+#use aws role in production
+try:
+    import aws_creds
+except:
+    pass
+
 
 gpd.io.file.fiona.drvsupport.supported_drivers["KML"] = "rw"
 
 
 HERE = pathlib.Path(__file__).parent
-DATA_DIR = HERE/'data'
+DATA_DIR = 'data'
+S3_BUCKET_NAME = 'voter-data'
 
 #check that install produces valid polygons
 assert shapely.geometry.Polygon([[0, 0], [1, 0], [1, 1], [0, 1], [0, 0]]).is_valid
@@ -15,11 +26,22 @@ assert shapely.geometry.Polygon([[0, 0], [1, 0], [1, 1], [0, 1], [0, 0]]).is_val
 
 GLOBAL_CRS ="EPSG:4326"
 
+class S3_Bucket():
+    def __init__(self, bucket_name):
+        self.s3 = boto3.client('s3')
+        self.bucket_name = bucket_name
+    def get_s3_file_bytes(self, key):
+        print(self.bucket_name, key)
+        obj = self.s3.get_object(Bucket=self.bucket_name, Key=key)
+        return io.BytesIO(obj['Body'].read())
+
+S3_OBJ = S3_Bucket(S3_BUCKET_NAME)
+
 def make_geo_df(name):
     path = f"{DATA_DIR}/{name}.kml"
     info_path = f"{DATA_DIR}/{name}.csv"
-    geo_df = gpd.read_file(path, driver="KML").pipe(clean_cols)
-    info_df = pd.read_csv(info_path).pipe(clean_cols)
+    geo_df = gpd.read_file(S3_OBJ.get_s3_file_bytes(path), driver="KML").pipe(clean_cols)
+    info_df = pd.read_csv(S3_OBJ.get_s3_file_bytes(info_path)).pipe(clean_cols)
     return pd.merge(geo_df, info_df, left_index=True, right_index=True).to_crs(GLOBAL_CRS)
 
 
@@ -29,12 +51,18 @@ def clean_cols(df):
     return df
 
 
+def get_year_month():
+    df = pd.read_pickle(S3_OBJ.get_s3_file_bytes(f"{DATA_DIR}/seattle_data.pickle"))
+    df = df[df.precinct.str.startswith('SEA ')]
+    return {year: months.month.unique() for year, months in df.groupby("year")}
+
+
 def get_kc_precinct_gdf():
     path = f"{DATA_DIR}/Voting_Districts_of_King_County___votdst_area.kml"
     path2 = f"{DATA_DIR}/Voting_Districts_of_King_County___votdst_area.csv"
 
-    df = gpd.read_file(path, driver="KML").pipe(clean_cols)
-    info_df = pd.read_csv(path2).pipe(clean_cols)
+    df = gpd.read_file(S3_OBJ.get_s3_file_bytes(path), driver="KML").pipe(clean_cols)
+    info_df = pd.read_csv(S3_OBJ.get_s3_file_bytes(path2)).pipe(clean_cols)
     out =  pd.merge(df, info_df).to_crs(GLOBAL_CRS)
     return out.rename(columns = {'name':'precinct_name'})
 
@@ -47,8 +75,8 @@ def get_seattle_precinct():
 def get_seattle_community_reporting_area():
     path = f"{DATA_DIR}/Community_Reporting_Areas.kml"
     info_path = f"{DATA_DIR}/Community_Reporting_Areas.csv"
-    info_df = pd.read_csv(info_path).pipe(clean_cols)
-    geo_df = gpd.read_file(path, driver="KML").pipe(clean_cols)
+    info_df = pd.read_csv(S3_OBJ.get_s3_file_bytes(info_path)).pipe(clean_cols)
+    geo_df = gpd.read_file(S3_OBJ.get_s3_file_bytes(path), driver="KML").pipe(clean_cols)
     return pd.merge(geo_df, info_df, left_index=True, right_index=True).to_crs(GLOBAL_CRS)
 
 
@@ -131,5 +159,3 @@ def get_all_geos(join_type="inner"):
 
     cd_precincts_cras_zips = join_by_max_intersect(cd_precincts_cras, zips, left_on='precinct_name', right_on='zipcode')
     return cd_precincts_cras_zips
-
-

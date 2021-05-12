@@ -2,6 +2,7 @@ from ingest import DOWNLOAD_PATH
 import glob
 import pandas as pd
 from helper import get_all_geos
+import io
 
 DTYPES = {
     "precinct": "category",
@@ -17,6 +18,13 @@ DTYPES = {
     "month": "int32",
 }
 
+class S3_Bucket():
+    def __init__(self, bucket_name):
+        self.s3 = boto3.client('s3')
+        self.bucket_name = bucket_name
+    def get_s3_file_bytes(self, key):
+        obj = s3.get_object(Bucket=self.bucket_name, Key=key)
+        return io.BytesIO(obj['Body'].read())
 
 def make_df(file_path):
     print(f"loading {file_path}")
@@ -56,7 +64,7 @@ def make_seattle_data(save_path):
     # council districts and precincts
     cd_precincts = get_all_geos("Council_Districts")
     df = get_all_the_data()
-    return df[df.precinct.isin(cd_precincts.name_left.unique())].to_pickle(save_path)
+    return df[df.precinct.isinls(cd_precincts.name_left.unique())].to_pickle(save_path)
 
 
 if __name__ == "__main__":
