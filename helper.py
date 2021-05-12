@@ -5,7 +5,7 @@ import pathlib
 import boto3
 import io
 
-#use aws role in production
+# use aws role in production
 try:
     import aws_creds
 except:
@@ -16,32 +16,40 @@ gpd.io.file.fiona.drvsupport.supported_drivers["KML"] = "rw"
 
 
 HERE = pathlib.Path(__file__).parent
-DATA_DIR = 'data'
-S3_BUCKET_NAME = 'voter-data'
+DATA_DIR = "data"
+S3_BUCKET_NAME = "voter-data"
 
-#check that install produces valid polygons
+# check that install produces valid polygons
 assert shapely.geometry.Polygon([[0, 0], [1, 0], [1, 1], [0, 1], [0, 0]]).is_valid
 
 
-GLOBAL_CRS ="EPSG:4326"
+GLOBAL_CRS = "EPSG:4326"
 
-class S3_Bucket():
+
+class S3_Bucket:
     def __init__(self, bucket_name):
-        self.s3 = boto3.client('s3')
+        self.s3 = boto3.client("s3")
         self.bucket_name = bucket_name
+
     def get_s3_file_bytes(self, key):
         print(self.bucket_name, key)
         obj = self.s3.get_object(Bucket=self.bucket_name, Key=key)
-        return io.BytesIO(obj['Body'].read())
+        return io.BytesIO(obj["Body"].read())
+
 
 S3_OBJ = S3_Bucket(S3_BUCKET_NAME)
+
 
 def make_geo_df(name):
     path = f"{DATA_DIR}/{name}.kml"
     info_path = f"{DATA_DIR}/{name}.csv"
-    geo_df = gpd.read_file(S3_OBJ.get_s3_file_bytes(path), driver="KML").pipe(clean_cols)
+    geo_df = gpd.read_file(S3_OBJ.get_s3_file_bytes(path), driver="KML").pipe(
+        clean_cols
+    )
     info_df = pd.read_csv(S3_OBJ.get_s3_file_bytes(info_path)).pipe(clean_cols)
-    return pd.merge(geo_df, info_df, left_index=True, right_index=True).to_crs(GLOBAL_CRS)
+    return pd.merge(geo_df, info_df, left_index=True, right_index=True).to_crs(
+        GLOBAL_CRS
+    )
 
 
 def clean_cols(df):
@@ -52,7 +60,7 @@ def clean_cols(df):
 
 def get_year_month():
     df = pd.read_pickle(S3_OBJ.get_s3_file_bytes(f"{DATA_DIR}/seattle_data.pickle"))
-    df = df[df.precinct.str.startswith('SEA ')]
+    df = df[df.precinct.str.startswith("SEA ")]
     return {year: months.month.unique() for year, months in df.groupby("year")}
 
 
@@ -62,8 +70,8 @@ def get_kc_precinct_gdf():
 
     df = gpd.read_file(S3_OBJ.get_s3_file_bytes(path), driver="KML").pipe(clean_cols)
     info_df = pd.read_csv(S3_OBJ.get_s3_file_bytes(path2)).pipe(clean_cols)
-    out =  pd.merge(df, info_df).to_crs(GLOBAL_CRS)
-    return out.rename(columns = {'name':'precinct_name'})
+    out = pd.merge(df, info_df).to_crs(GLOBAL_CRS)
+    return out.rename(columns={"name": "precinct_name"})
 
 
 def get_seattle_precinct():
@@ -75,8 +83,12 @@ def get_seattle_community_reporting_area():
     path = f"{DATA_DIR}/Community_Reporting_Areas.kml"
     info_path = f"{DATA_DIR}/Community_Reporting_Areas.csv"
     info_df = pd.read_csv(S3_OBJ.get_s3_file_bytes(info_path)).pipe(clean_cols)
-    geo_df = gpd.read_file(S3_OBJ.get_s3_file_bytes(path), driver="KML").pipe(clean_cols)
-    return pd.merge(geo_df, info_df, left_index=True, right_index=True).to_crs(GLOBAL_CRS)
+    geo_df = gpd.read_file(S3_OBJ.get_s3_file_bytes(path), driver="KML").pipe(
+        clean_cols
+    )
+    return pd.merge(geo_df, info_df, left_index=True, right_index=True).to_crs(
+        GLOBAL_CRS
+    )
 
 
 def join_seattle(df):
@@ -91,34 +103,36 @@ def close_polygon(shapely_polygon):
     return shapely_polygon
 
 
-def join_by_max_intersect(small_geo_df,big_geo_df, left_on=None, right_on=None):
+def join_by_max_intersect(small_geo_df, big_geo_df, left_on=None, right_on=None):
     """ return a joined df where poly1 is joined to poly2 if it has max intersection"""
-    if not any([left_on,right_on]):
-        print('Must specify join keys')
+    if not any([left_on, right_on]):
+        print("Must specify join keys")
         return None
 
-    #drop common join cols
+    # drop common join cols
     if left_on != right_on:
-        small_geo_df.drop(columns=[right_on],inplace=True, errors='ignore' )
-        big_geo_df.drop(columns=[left_on] ,inplace=True, errors='ignore' )
+        small_geo_df.drop(columns=[right_on], inplace=True, errors="ignore")
+        big_geo_df.drop(columns=[left_on], inplace=True, errors="ignore")
 
-    overlay = gpd.overlay(small_geo_df,big_geo_df, how='intersection')
+    overlay = gpd.overlay(small_geo_df, big_geo_df, how="intersection")
 
-    #calculate overlay intersection area
-    overlay['intersect_area'] = overlay.geometry.area
-    overlay = overlay[[left_on,right_on,'intersect_area']]
+    # calculate overlay intersection area
+    overlay["intersect_area"] = overlay.geometry.area
+    overlay = overlay[[left_on, right_on, "intersect_area"]]
 
-    #spatial join leads to small polygons being members for multiple large polygons at borders
+    # spatial join leads to small polygons being members for multiple large polygons at borders
     for df in [small_geo_df, big_geo_df]:
-        df.drop(columns=['index_left','index_right'], inplace=True, errors='ignore')
-    s_joined = gpd.sjoin(small_geo_df, big_geo_df, how='left', op="intersects")
+        df.drop(columns=["index_left", "index_right"], inplace=True, errors="ignore")
+    s_joined = gpd.sjoin(small_geo_df, big_geo_df, how="left", op="intersects")
 
-    #select the largest intersection
-    merged = pd.merge(s_joined, overlay, on=[left_on,right_on])
-    idx_max = merged.groupby([left_on])['intersect_area'].transform(max) == merged['intersect_area']
-    merged.drop(columns=['intersect_area'], inplace=True)
+    # select the largest intersection
+    merged = pd.merge(s_joined, overlay, on=[left_on, right_on])
+    idx_max = (
+        merged.groupby([left_on])["intersect_area"].transform(max)
+        == merged["intersect_area"]
+    )
+    merged.drop(columns=["intersect_area"], inplace=True)
     return merged[idx_max]
-
 
 
 def get_all_geos(join_type="inner"):
@@ -142,19 +156,29 @@ def get_all_geos(join_type="inner"):
         "shape_area_right": "shape_area_cd",
     }
     precinct_df = get_seattle_precinct()
-    cd = make_geo_df('Council_Districts')
-    cd_precincts =  (
-        join_by_max_intersect(precinct_df, cd, left_on='precinct_name', right_on='c_district')
-        .drop(columns=drop_cols, errors='ignore')
+    cd = make_geo_df("Council_Districts")
+    cd_precincts = (
+        join_by_max_intersect(
+            precinct_df, cd, left_on="precinct_name", right_on="c_district"
+        )
+        .drop(columns=drop_cols, errors="ignore")
         .rename(columns=rename_dict)
     )
 
     scr = get_seattle_community_reporting_area()
-    scr = scr.drop(columns=['name','description', 'objectid', 'cra_grp', 'shape_length'])
-    cd_precincts_cras = join_by_max_intersect(cd_precincts, scr, left_on='precinct_name', right_on='cra_no')
+    scr = scr.drop(
+        columns=["name", "description", "objectid", "cra_grp", "shape_length"]
+    )
+    cd_precincts_cras = join_by_max_intersect(
+        cd_precincts, scr, left_on="precinct_name", right_on="cra_no"
+    )
 
-    zips = make_geo_df('Zip_Codes')
-    zips = zips.drop(columns=['name','description', 'objectid', 'shape_length','county'])
+    zips = make_geo_df("Zip_Codes")
+    zips = zips.drop(
+        columns=["name", "description", "objectid", "shape_length", "county"]
+    )
 
-    cd_precincts_cras_zips = join_by_max_intersect(cd_precincts_cras, zips, left_on='precinct_name', right_on='zipcode')
+    cd_precincts_cras_zips = join_by_max_intersect(
+        cd_precincts_cras, zips, left_on="precinct_name", right_on="zipcode"
+    )
     return cd_precincts_cras_zips

@@ -97,7 +97,6 @@ def agg_votes(er):
     return er.groupby(["precinct", "binned_counter"]).sumofcount.sum().unstack()
 
 
-
 def join_vote_data(df, er, agg_geo):
     """['precinct',
          'race',
@@ -179,16 +178,19 @@ def multi_plot(cntrs, df):
         try:
             i_ax.title.set_text(cntrs[i])
             df.plot(
-                column=cntrs[i], legend=True, ax=i_ax,
-                #scheme='quantiles',
-                #k=40
-                #cmap='OrRd'
+                column=cntrs[i],
+                legend=True,
+                ax=i_ax,
+                # scheme='quantiles',
+                # k=40
+                # cmap='OrRd'
             )
             i_ax.axes.xaxis.set_visible(False)
             i_ax.axes.yaxis.set_visible(False)
         except IndexError:
             fig.delaxes(i_ax)
     return fig
+
 
 @st.cache
 def total_row(tdf, label_col):
@@ -197,7 +199,7 @@ def total_row(tdf, label_col):
     if pd.api.types.is_numeric_dtype(out[label_col]):
         idx = out[label_col].idxmax()
         out[label_col] = out[label_col].astype(int).astype(str)
-        out.loc[idx,label_col] = "Total"
+        out.loc[idx, label_col] = "Total"
 
     else:
         out[label_col] = out[label_col].fillna("Total")
@@ -237,7 +239,11 @@ if __name__ == "__main__":
 
     # widgets
     year = col1.selectbox("Election Year", list(year_month_dict.keys()))
-    month = col1.selectbox("Election Month", sorted(year_month_dict[year]), format_func=lambda x: calendar.month_name[x])
+    month = col1.selectbox(
+        "Election Month",
+        sorted(year_month_dict[year]),
+        format_func=lambda x: calendar.month_name[x],
+    )
 
     other_pct = col2.slider(
         'Bin Candidates receiving less than X% of vote into "Other"',
@@ -266,7 +272,9 @@ if __name__ == "__main__":
 
     # agg geo
     geo_opts = ["precinct_name", "zipcode", "c_district", "gen_alias"]
-    geo_select = col3.selectbox("Geographical Aggregation", [rename_geos[name] for name in geo_opts])
+    geo_select = col3.selectbox(
+        "Geographical Aggregation", [rename_geos[name] for name in geo_opts]
+    )
     agg_geo = inverse_geos[geo_select]
 
     full_vote = join_vote_data(geo, election_race, agg_geo=agg_geo)
@@ -299,19 +307,19 @@ if __name__ == "__main__":
     )
     merged = merged[merged["Registered Voters Counts"] > 0]
 
-    total_row_idx = merged[rename_geos[agg_geo]] == 'Total'
+    total_row_idx = merged[rename_geos[agg_geo]] == "Total"
     total_row = merged[total_row_idx]
-    merged  = merged[~total_row_idx]
+    merged = merged[~total_row_idx]
     summary = merged.sort_values(rename_geos[agg_geo])
     summary = pd.concat([total_row, summary])
 
-    plot_type = col3.selectbox("Plot Type", [ "Normed Counts", "Absolute Counts"])
+    plot_type = col3.selectbox("Plot Type", ["Normed Counts", "Absolute Counts"])
 
     expander = st.beta_expander("FAQ")
     expander.markdown(NOTES)
 
     if plot_type == "Normed Counts":
-        normed.loc[:,counters]  = normed.loc[:,counters] * 100
+        normed.loc[:, counters] = normed.loc[:, counters] * 100
         fig = multi_plot(counters, normed)
     else:
         fig = multi_plot(counters, full_vote[full_vote["Registered Voters"] > 0])
