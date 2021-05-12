@@ -5,7 +5,6 @@ import pathlib
 import boto3
 import io
 
-
 #use aws role in production
 try:
     import aws_creds

@@ -10,7 +10,7 @@ import inspect
 import math
 import matplotlib
 import altair as alt
-from helper import DATA_DIR
+from helper import DATA_DIR, S3_OBJ
 import calendar
 
 DROP_COUNTERS = [
@@ -79,7 +79,7 @@ def voter_data():
 
 @st.cache
 def get_election(year, month):
-    df = pd.read_pickle(f"{DATA_DIR}/seattle_data.pickle")
+    df = pd.read_pickle(S3_OBJ.get_s3_file_bytes(f"{DATA_DIR}/seattle_data.pickle"))
     # filter out non-seattle races
     seattle = df.precinct.str.startswith("SEA ")
     non_seattle_races = (
