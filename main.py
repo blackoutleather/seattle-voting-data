@@ -45,11 +45,13 @@ NOTES = (
     "join these empty precincts to a neighbor presumably to avoid questions"
     "\n* Don't know your district/voting precinct? Checkout King County for "
     "[maps and other info](https://kingcounty.gov/depts/elections/elections/maps/precinct-and-district-data.aspx)"
-    '\n* What up with "Erase Trump?": Notice that about 8% of Seattle voted for Trump. But the Trump rate is not uniform. '
+    '\n* What up with "Erase Trump?": Notice that about 8% of Seattle voted for Trump. But the Trump vote rate is not uniform. '
     "For example 30% of Broadmoor voted for Trump in both elections. Now notice that the precincts "
-    "with high Trump vote counts also vote for other unpopular candidates i.e. Loren Culp, Egan Orion etc. Use this button "
+    "with high Trump vote counts also vote at high rates for other unpopular candidates i.e. Loren Culp, Egan Orion etc. "
+    'Turns out we have our own analog of "Red States". \nUse the Erase Trump checkbox  ''
     "to play a game where you imagine that Trump losers didn't vote for the loser in a given race in given precinct. "
-    "How does that change things?"
+    "How does that change things? (This button subtracts the 2020 Trump vote count in each precinct from the vote count "
+    "of the 2nd place vote count. Have fun or You mad, bro?)"
 )
 
 DEMO_NOTES = (
@@ -57,7 +59,7 @@ DEMO_NOTES = (
     " in the election data view. To make it run faster, I am not doing any fancy geography maniplulation and just drawing "
     "the zipcodes as they are. In the election view I am drawing only the portions of the zipcodes that have Seattle voter precincts."
     " However, I am not including non-Seattle voters in the age statistics below. It's all Seattle and only Seattle, baby! "
-    "\n* Jet City FOHEVAH!!"
+    "\n Jet City FOHEVAH!!"
 )
 
 
@@ -365,7 +367,7 @@ def voter():
     summary = pd.concat([total_row_df, summary])
 
     plot_type = col3.selectbox(
-        "Plot Type", ["Normed Counts", "Absolute Counts", "Voter Age"]
+        "Plot Type", ["Normed Counts", "Absolute Counts"]
     )
 
     expander = st.beta_expander("FAQ")
