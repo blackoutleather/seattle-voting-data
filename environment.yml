@@ -1,4 +1,4 @@
-name: app
+name: vote_data
 channels:
   - conda-forge
 dependencies:
