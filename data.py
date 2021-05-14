@@ -2,7 +2,7 @@ from ingest import DOWNLOAD_PATH
 import glob
 import pandas as pd
 from helper import get_all_geos
-import io
+from s3 import S3_Bucket
 
 DTYPES = {
     "precinct": "category",
@@ -17,14 +17,8 @@ DTYPES = {
     "year": "int32",
     "month": "int32",
 }
-
-class S3_Bucket():
-    def __init__(self, bucket_name):
-        self.s3 = boto3.client('s3')
-        self.bucket_name = bucket_name
-    def get_s3_file_bytes(self, key):
-        obj = s3.get_object(Bucket=self.bucket_name, Key=key)
-        return io.BytesIO(obj['Body'].read())
+S3_BUCKET_NAME = 'voter-data'
+S3_OBJ = S3_Bucket(S3_BUCKET_NAME)
 
 def make_df(file_path):
     print(f"loading {file_path}")
@@ -65,6 +59,31 @@ def make_seattle_data(save_path):
     cd_precincts = get_all_geos("Council_Districts")
     df = get_all_the_data()
     return df[df.precinct.isinls(cd_precincts.name_left.unique())].to_pickle(save_path)
+
+
+def get_voter_reg():
+    zipfile = '1702125604/202105_VRDB_Extract.txt'
+    obj = S3_OBJ.get_object(Bucket=self.bucket_name, Key=f"data/{zipfile}")
+    df = pd.read_csv(obj)
+    return df
+
+def get_age_data():
+    """just a groupby agg to describe of agg by precinct"""
+    return pd.read_pickle(S3_OBJ.get_s3_file_bytes("data/precinct_age.pickle"))
+
+def get_long_age_data():
+    """ all voter ages joined to precincts"""
+    return pd.read_pickle(S3_OBJ.get_s3_file_bytes("data/precinct_age_long.pickle"))
+
+def join_geos_to_voter_age(geo_df):
+    #geo_df = get_all_geos()
+    geo_df = geo[['precinct_name', 'geometry', 'c_district', 'gen_alias', 'zipcode']]
+    age_data = get_long_age_data()
+    joined = pd.merge(
+        geo_df, age_data, left_on="precinct_name", right_on="PrecinctName", how="left"
+    )
+    S3_OBJ.write_pickle(joined, 'data/voter_age_geos.pickle')
+
 
 
 if __name__ == "__main__":

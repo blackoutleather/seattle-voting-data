@@ -35,5 +35,8 @@ RUN bash -c "conda init"
 # copying all files over
 COPY . /app
 
+#run script to setup analytics
+RUN bash -c "conda run -n app python google_analytics.py"
+
 #The code to run when container is started:
 ENTRYPOINT ["conda", "run", "-n", "app", "streamlit", "run", "main.py"]

@@ -1,17 +1,12 @@
-import geopandas as gpd
 import pandas as pd
-import fiona
 import streamlit as st
 import matplotlib.pyplot as plt
-from ingest import DOWNLOAD_PATH
 import helper
-from inspect import getmembers, isfunction
-import inspect
 import math
 import matplotlib
-import altair as alt
 from helper import DATA_DIR, S3_OBJ
 import calendar
+from data import get_age_data
 
 DROP_COUNTERS = [
     "Times Over Voted",
@@ -21,12 +16,13 @@ DROP_COUNTERS = [
     "Times Blank Voted",
 ]
 
-make_geo_df = st.cache(helper.make_geo_df)
+make_geo_df = st.cache(helper.make_geo_df, allow_output_mutation=True)
 clean_cols = st.cache(helper.clean_cols)
 get_seattle_precinct = st.cache(helper.get_seattle_precinct)
-join_to_precincts = st.cache(helper.get_all_geos)
+get_all_geos = st.cache(helper.get_all_geos)
 get_year_month = st.cache(helper.get_year_month)
-
+get_seattle_precinct = st.cache(get_seattle_precinct)
+get_age_data = st.cache(get_age_data)
 
 rename_geos = {
     "precinct_name": "Voter Precinct",
@@ -42,39 +38,29 @@ NOTES = (
     "In the case where a precinct intersects with multiple larger geographic boundaries I have assigned that precinct "
     "to the geography that has the greatest intersection."
     "\n* Voter precincts with zero registered voters show up as blank in the map. "
-    "I don't know why there are no voters in these precincts. "
+    "I don't know why there are no voters in these precincts. Note that these blank precincts are more numerous "
+    "in 2016 elections and slowly disappear as we get to 2020. Its wild to think that there were so many non-voting "
+    "parts of the city just 4 years ago."
     "\n* Note that in major publication's maps they "
     "join these empty precincts to a neighbor presumably to avoid questions"
     "\n* Don't know your district/voting precinct? Checkout King County for "
     "[maps and other info](https://kingcounty.gov/depts/elections/elections/maps/precinct-and-district-data.aspx)"
-    '"\n* What up with "Erase Trump?": Notice that about 8% of Seattle voted for Trump. But the Trump rate is not uniform. '
+    '\n* What up with "Erase Trump?": Notice that about 8% of Seattle voted for Trump. But the Trump rate is not uniform. '
     "For example 30% of Broadmoor voted for Trump in both elections. Now notice that the precincts "
     "with high Trump vote counts also vote for other unpopular candidates i.e. Loren Culp, Egan Orion etc. Use this button "
     "to play a game where you imagine that Trump losers didn't vote for the loser in a given race in given precinct. "
     "How does that change things?"
 )
 
+DEMO_NOTES = (
+    "* Why do the zipcode geos look different? The voter age data I'm working with is much larger than the vote count data "
+    " in the election data view. To make it run faster, I am not doing any fancy geography maniplulation and just drawing "
+    "the zipcodes as they are. In the election view I am drawing only the portions of the zipcodes that have Seattle voter precincts."
+    " However, I am not including non-Seattle voters in the age statistics below. It's all Seattle and only Seattle, baby! "
+    "\n* Jet City FOHEVAH!!"
+)
 
-def decorate(func):
-    # See explanation below
-    lines = inspect.stack(context=2)[1].code_context
-    decorated = any(line.startswith("@") for line in lines)
 
-    print(func.__name__, 'was decorated with "@decorate":', decorated)
-    return func
-
-
-@st.cache
-def voter_data():
-    path = "/Users/devin.wilkinson/Downloads/BallotStatus King 120219.csv"
-    misaligned = pd.read_csv(path, index_col=None).pipe(clean_cols)
-    cols = misaligned.columns
-    aligned = misaligned.reset_index()
-    # drop last col
-    aligned = aligned.iloc[:, :-1]
-
-    aligned.columns = cols
-    return aligned
 
 
 @st.cache
@@ -96,8 +82,8 @@ def get_election(year, month):
 def agg_votes(er):
     return er.groupby(["precinct", "binned_counter"]).sumofcount.sum().unstack()
 
-
-def join_vote_data(df, er, agg_geo):
+@st.cache
+def join_vote_to_geo(geo_df, er, agg_geo, counters):
     """['precinct',
          'race',
          'leg',
@@ -110,9 +96,31 @@ def join_vote_data(df, er, agg_geo):
 
     agg_vote = agg_votes(er)
     joined = pd.merge(
-        df, agg_vote, left_on="precinct_name", right_on="precinct"
-    ).dissolve(by=agg_geo, aggfunc="sum", as_index=False)
+        geo_df, agg_vote, left_on="precinct_name", right_on="precinct", how="left"
+    )
+    joined.loc[:, counters] = joined.loc[:, counters].fillna(0)
+    age_data = get_age_data()
+    joined = pd.merge(
+        joined,
+        age_data[["mean", "25%", "50%", "75%"]],
+        left_on="precinct_name",
+        right_index=True,
+    )
+    joined = joined.dissolve(by=agg_geo, aggfunc="sum", as_index=False, dropna=False)
     return joined
+
+@st.cache
+def join_demo_to_geo(agg_geo, geo_df, metrics, council_districts = None):
+    cols = ['precinct_name','c_district', 'gen_alias', 'zipcode', 'age_years']
+    voter_age_df = pd.read_pickle(S3_OBJ.get_s3_file_bytes(f'{DATA_DIR}/voter_age_geos.pickle'))[cols]
+
+    if council_districts:
+        voter_age_df = voter_age_df.query('c_district in @council_districts')
+
+    agg_df = voter_age_df.groupby(agg_geo)['age_years'].describe().reset_index()
+    agg_df = agg_df.rename(columns= {'count': 'Voter Count', 'mean': 'Average', '50%': 'Median'})
+
+    return pd.merge(geo_df, agg_df, on=agg_geo)
 
 
 @st.cache
@@ -164,7 +172,7 @@ def get_election_race(election, race, erase_trump=False, other_pct=0.1):
 
 
 @st.cache(hash_funcs={matplotlib.figure.Figure: lambda _: None})
-def multi_plot(cntrs, df):
+def multi_plot(cntrs, df, legend_label):
     n_plots = len(cntrs)
     ncols = 2
     nrows = math.ceil(n_plots / 2)
@@ -181,6 +189,9 @@ def multi_plot(cntrs, df):
                 column=cntrs[i],
                 legend=True,
                 ax=i_ax,
+                legend_kwds={'label': legend_label,
+                            #'orientation': "horizontal"
+                             }
                 # scheme='quantiles',
                 # k=40
                 # cmap='OrRd'
@@ -203,7 +214,6 @@ def total_row(tdf, label_col):
 
     else:
         out[label_col] = out[label_col].fillna("Total")
-    # out["Registered Voters"] = out[counters[:-1]].sum(axis=1) / out["Registered Voters"]
     return out
 
 
@@ -217,25 +227,64 @@ def norm_vote_counts(df, counters):
     )
     return df
 
+def demographics():
+    col1, col2 = st.beta_columns(2)
 
-if __name__ == "__main__":
-    # setup streamlit
-    st.set_page_config(layout="wide")
-    st.set_option("deprecation.showPyplotGlobalUse", True)
+    geo = helper.get_all_geos()
 
-    st.image("./resources/dead_people.jpeg", width=300)
-    st.markdown('# "I SEA ELECTION DATA"')
-    st.markdown(
-        "I can see Seattle election data and now you can too. What patterns are revealed when you can see where "
-        "the votes are coming from? I am afraid that these votes are coming from inside the house."
+    # agg geo
+    geo_opts = ["precinct_name", "zipcode", "c_district", "gen_alias"]
+    geo_select = col1.selectbox(
+        "Geographical Aggregation", [rename_geos[name] for name in geo_opts]
+    )
+    agg_geo = inverse_geos[geo_select]
+
+    control = {"precinct_name": 'Precincts',
+    "zipcode" : ['Zip_Codes'],
+    "c_district": ['Council_Districts'],
+    "gen_alias": ["Community_Reporting_Areas"]}
+
+    if agg_geo == 'precinct_name':
+        geo_df = get_seattle_precinct()
+    else:
+        geo_df = make_geo_df(control[agg_geo][0])[['geometry', agg_geo]]
+
+    cd = col2.multiselect('Council District', list(range(1,10)))
+
+    expander = st.beta_expander("FAQ")
+    expander.markdown(DEMO_NOTES)
+
+
+    metrics  = ['Average',  'Median', 'Voter Count']
+    geo_demo = join_demo_to_geo(agg_geo, geo_df, metrics, council_districts=cd)
+
+    #st.write(geo_demo)
+
+    fig = multi_plot(metrics, geo_demo , legend_label='Voter Age in Years')
+
+    st.markdown(f'## Registered Voter Age Metrics by {rename_geos[agg_geo]}')
+
+    st.pyplot(fig)
+
+    table = geo_demo[[agg_geo] + metrics].set_index(agg_geo)#.rename(columns = {agg_geo: rename_geos[agg_geo]})
+
+    styled_table = (
+        table.sort_values(table.columns[-1], ascending=False)
+        .style.background_gradient(subset=[table.columns[0]])
+        .background_gradient(subset=[table.columns[1]])
+        .format("{:.1f}", subset=table.columns[0:2])
+        .format("{:,.0f}", subset=table.columns[-1])
     )
 
+    st.table(styled_table)
+
+def voter():
     col1, col2, col3 = st.beta_columns(3)
 
     # inputs
     year_month_dict = get_year_month()
 
-    geo = join_to_precincts("Council_Districts")
+    geo = helper.get_all_geos()
 
     # widgets
     year = col1.selectbox("Election Year", list(year_month_dict.keys()))
@@ -277,7 +326,9 @@ if __name__ == "__main__":
     )
     agg_geo = inverse_geos[geo_select]
 
-    full_vote = join_vote_data(geo, election_race, agg_geo=agg_geo)
+    full_vote = join_vote_to_geo(geo, election_race, agg_geo=agg_geo, counters=counters)
+
+    age_vote = full_vote.drop(columns=counters)
 
     # turnout
     raw_count = full_vote.copy()
@@ -308,23 +359,28 @@ if __name__ == "__main__":
     merged = merged[merged["Registered Voters Counts"] > 0]
 
     total_row_idx = merged[rename_geos[agg_geo]] == "Total"
-    total_row = merged[total_row_idx]
+    total_row_df = merged[total_row_idx]
     merged = merged[~total_row_idx]
     summary = merged.sort_values(rename_geos[agg_geo])
-    summary = pd.concat([total_row, summary])
+    summary = pd.concat([total_row_df, summary])
 
-    plot_type = col3.selectbox("Plot Type", ["Normed Counts", "Absolute Counts"])
+    plot_type = col3.selectbox(
+        "Plot Type", ["Normed Counts", "Absolute Counts", "Voter Age"]
+    )
 
     expander = st.beta_expander("FAQ")
     expander.markdown(NOTES)
 
     if plot_type == "Normed Counts":
         normed.loc[:, counters] = normed.loc[:, counters] * 100
-        fig = multi_plot(counters, normed)
+        fig = multi_plot(counters, normed, legend_label='% of Total Votes Cast')
+    elif plot_type == "Absolute Counts":
+        fig = multi_plot(counters, full_vote[full_vote["Registered Voters"] > 0], legend_label='Votes')
     else:
-        fig = multi_plot(counters, full_vote[full_vote["Registered Voters"] > 0])
+        fig = multi_plot(["mean", "25%", "50%", "75%"], full_vote)
 
-    st.write(fig)
+    st.markdown(f'## {plot_type} of Votes for {race} in {calendar.month_name[month]}, {year} aggregated by {rename_geos[agg_geo]}')
+    st.pyplot(fig)
 
     styled = (
         summary.sort_values(summary.columns[-1], ascending=False)
@@ -335,4 +391,24 @@ if __name__ == "__main__":
         .format("{:,.0f}", subset=[col for col in summary.columns if "Counts" in col])
     )
 
-    st.table(styled)  # ,height=6000)
+    st.table(styled)
+
+
+if __name__ == "__main__":
+    # setup streamlit
+    st.set_page_config(layout="wide")
+    st.set_option("deprecation.showPyplotGlobalUse", True)
+
+    st.image("./resources/dead_people.jpeg", width=300)
+    st.markdown('# "I SEA ELECTION DATA"')
+    st.markdown(
+        "I can see Seattle election data and now you can too. What patterns are revealed when you can see where "
+        "the votes are coming from? I am afraid that many of these votes are coming from inside the house."
+    )
+
+    tab = st.sidebar.radio("", ["Elections Data", "Voter Demographics Data"])
+
+    if tab == "Elections Data":
+        voter()
+    else:
+        demographics()

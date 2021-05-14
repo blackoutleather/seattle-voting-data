@@ -2,13 +2,13 @@ import geopandas as gpd
 import pandas as pd
 import shapely
 import pathlib
-import boto3
-import io
+from s3 import S3_Bucket
 
 # use aws role in production
 try:
     import aws_creds
 except:
+    #production
     pass
 
 
@@ -24,18 +24,6 @@ assert shapely.geometry.Polygon([[0, 0], [1, 0], [1, 1], [0, 1], [0, 0]]).is_val
 
 
 GLOBAL_CRS = "EPSG:4326"
-
-
-class S3_Bucket:
-    def __init__(self, bucket_name):
-        self.s3 = boto3.client("s3")
-        self.bucket_name = bucket_name
-
-    def get_s3_file_bytes(self, key):
-        print(self.bucket_name, key)
-        obj = self.s3.get_object(Bucket=self.bucket_name, Key=key)
-        return io.BytesIO(obj["Body"].read())
-
 
 S3_OBJ = S3_Bucket(S3_BUCKET_NAME)
 
