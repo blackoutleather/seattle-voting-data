@@ -2,6 +2,7 @@ name: vote_data
 channels:
   - conda-forge
 dependencies:
+  - python=3.8
   - matplotlib
   - geopandas
   - pandas
@@ -9,4 +10,3 @@ dependencies:
   - rtree
   - bs4
   - streamlit
-

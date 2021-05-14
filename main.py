@@ -114,7 +114,7 @@ def join_vote_to_geo(geo_df, er, agg_geo, counters):
     return joined
 
 
-@st.cache
+@st.cache(allow_output_mutation=True)
 def join_demo_to_geo(agg_geo, geo_df, metrics, council_districts=None):
     cols = ["precinct_name", "c_district", "gen_alias", "zipcode", "age_years"]
     voter_age_df = pd.read_pickle(
@@ -295,7 +295,7 @@ def demographics():
 
     st.pyplot(fig)
 
-    table = geo_demo[[agg_geo] + metrics].filter("c_district in @cd").set_index(agg_geo)
+    table = geo_demo[[agg_geo] + metrics].set_index(agg_geo)
 
     styled_table = (
         table.sort_values(table.columns[-1], ascending=False)
