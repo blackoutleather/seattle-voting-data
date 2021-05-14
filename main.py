@@ -48,11 +48,11 @@ NOTES = (
     '\n* **"What up with "Erase Trump?**": Notice that about 8% of Seattle voted for Trump. But the Trump vote rate is not uniform. '
     "For example 30% of Broadmoor voted for Trump in both elections. Now notice that the precincts "
     "with high Trump vote counts also vote at high rates for other unpopular candidates i.e. Loren Culp, Egan Orion etc. "
-    'Turns out we have our own analog of "Red States". \nUse the **Erase Trump** checkbox  ''
+    'Turns out we have our own analog of "Red States". \nUse the **Erase Trump** checkbox  '
     "to play a game where you imagine that Trump losers didn't vote for the loser in a given race in a given precinct. "
     "How does that change things? (This button subtracts the 2020 Trump vote count in each precinct from the vote count "
     "of the 2nd place candidate in a given election race. You havin' fun yet or are You mad, bro?")
-)
+
 
 DEMO_NOTES = (
     "* Why do the zipcode geos look different? The voter age data I'm working with is much larger than the vote count data "
