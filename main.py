@@ -215,7 +215,7 @@ def multi_plot(cntrs, df, legend_label, agg_geo=None, plot_geo_labels=False):
                     lambda x: i_ax.annotate(
                         s=x[agg_geo],
                         xy=x.geometry.centroid.coords[0],
-                        fontsize="small",
+                        fontsize="xx-small",
                         ha="center",
                     ),
                     axis=1,
