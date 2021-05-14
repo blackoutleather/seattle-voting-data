@@ -52,7 +52,7 @@ NOTES = (
     "to play a game where you imagine that Trump losers didn't vote for the loser in a given race in a given precinct. "
     "How does that change things? (This button subtracts the 2020 Trump vote count in each precinct from the vote count "
     "of the 2nd place candidate in a given election race. You havin' fun yet or are You mad, bro?"
-    "\n* Why do the Geographic Labels look like crap?: Heya, lay off! It ain't exactly easy to cram all that sweet sweet "
+    "\n* *Why do the Geographic Labels look like crap?*: Heya, lay off! It ain't exactly easy to cram all that sweet sweet "
     "info in one map. I'm workin' on it, mmk?"
 )
 
@@ -295,9 +295,7 @@ def demographics():
 
     st.pyplot(fig)
 
-    table = geo_demo[[agg_geo] + metrics].set_index(
-        agg_geo
-    )  # .rename(columns = {agg_geo: rename_geos[agg_geo]})
+    table = geo_demo[[agg_geo] + metrics].filter("c_district in @cd").set_index(agg_geo)
 
     styled_table = (
         table.sort_values(table.columns[-1], ascending=False)
@@ -433,6 +431,7 @@ def voter():
     st.table(styled)
 
 
+@st.cache
 def put_centers_on_polys(geo_df):
     geo_df["coords"] = geo_df["geometry"].apply(
         lambda x: x.representative_point().coords[:][0] if x else None
