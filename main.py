@@ -217,6 +217,7 @@ def multi_plot(cntrs, df, legend_label, agg_geo=None, plot_geo_labels=False):
                         xy=x.geometry.centroid.coords[0],
                         fontsize="xx-small",
                         ha="center",
+                        #color='white'
                     ),
                     axis=1,
                 )
@@ -337,8 +338,8 @@ def voter():
     election = get_election(year, month)
     races = election.race.unique()
     race = col2.selectbox("Race", races)
-    plot_geo_labels = st.checkbox("Plot Geographic Labels", value=False)
-    erase_trump = st.checkbox("Erase Trump", value=False)
+    plot_geo_labels = col1.checkbox("Plot Geographic Labels", value=False)
+    erase_trump = col2.checkbox("Erase Trump", value=False)
     election_race = get_election_race(
         election, race, erase_trump=erase_trump, other_pct=other_pct
     )
@@ -444,6 +445,7 @@ if __name__ == "__main__":
     # setup streamlit
     st.set_page_config(layout="wide")
     st.set_option("deprecation.showPyplotGlobalUse", True)
+
 
     st.image("./resources/dead_people.jpeg", width=300)
     st.markdown('# "I SEA ELECTION DATA"')
